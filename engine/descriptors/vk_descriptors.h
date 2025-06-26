@@ -49,7 +49,7 @@ struct DescriptorAllocatorGrowable {
         float ratio;
     };
 
-    void init(vk::Device device, uint32_t initialSets, std::span<PoolSizeRatio> poolRatios);
+    void init(vk::Device device, uint32_t maxSets, std::span<PoolSizeRatio> poolRatios);
     void clear_pools(vk::Device device);
     void destroy_pools(vk::Device device);
 

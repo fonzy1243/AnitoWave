@@ -87,6 +87,13 @@ add_executable(AnitoWave main.cpp
         include/vk_include.h
         engine/anito_wave.cpp
         engine/anito_wave.h
+        ${IMGUI_DIR}/backends/imgui_impl_sdl3.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
+        ${IMGUI_DIR}/imgui.cpp
+        ${IMGUI_DIR}/imgui_draw.cpp
+        ${IMGUI_DIR}/imgui_tables.cpp
+        ${IMGUI_DIR}/imgui_widgets.cpp
+        ${IMGUI_DIR}/imgui_demo.cpp
         include/vk_disp_loader.cpp
         include/tiny_obj_loader.cpp
         engine/types/vk_types.h
@@ -102,6 +109,8 @@ add_executable(AnitoWave main.cpp
         engine/loader/vk_loader.h
         engine/camera/camera.cpp
         engine/camera/camera.h)
+
+add_dependencies(AnitoWave compile_shaders)
 
 target_link_libraries(AnitoWave SDL3::SDL3)
 target_link_libraries(AnitoWave glm::glm)

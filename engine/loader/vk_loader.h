@@ -10,8 +10,6 @@
 #include <unordered_map>
 #include <filesystem>
 
-#include "../anito_wave.h"
-
 class AnitoWave;
 
 struct Bounds {

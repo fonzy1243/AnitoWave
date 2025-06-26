@@ -145,8 +145,6 @@ public:
     vk::Queue _graphicsQueue;
     uint32_t _graphicsQueueFamily;
 
-    AllocatedBuffer _defaultGLTFMaterialData;
-
     FrameData _frames[FRAME_OVERLAP];
 
     vk::SurfaceKHR _surface;
@@ -241,7 +239,6 @@ public:
     void immediate_submit(std::function<void(vk::CommandBuffer cmd)>&& function);
 
     std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> loadedScenes;
-    std::vector<std::shared_ptr<LoadedGLTF>> brickadiaScene;
 
     void destroy_image(const AllocatedImage& img);
     void destroy_buffer(const AllocatedBuffer& buffer);

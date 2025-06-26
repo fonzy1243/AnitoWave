@@ -134,6 +134,18 @@ void AnitoWave::init_default_data() {
     if (createRes != vk::Result::eSuccess) {
         throw std::runtime_error("failed to create sampler");
     }
+
+    _mainDeletionQueue.push_function([=, this]() {
+    destroy_buffer(rectangle.indexBuffer);
+    destroy_buffer(rectangle.vertexBuffer);
+
+    destroy_image(_whiteImage);
+    destroy_image(_greyImage);
+    destroy_image(_blackImage);
+
+    _device.destroySampler(_defaultSamplerNearest);
+    _device.destroySampler(_defaultSamplerLinear);
+});
 }
 
 void AnitoWave::cleanup() {
@@ -145,6 +157,9 @@ void AnitoWave::cleanup() {
         for (auto& frame : _frames) {
             frame._deletionQueue.flush();
         }
+
+        destroy_image(_errorCheckerboardImage);
+        metalRoughMaterial.clear_resources(_device);
 
         _mainDeletionQueue.flush();
 
@@ -233,7 +248,7 @@ void AnitoWave::init_background_pipelines() {
     _device.destroyShaderModule(gradientShader);
     _device.destroyShaderModule(skyShader);
 
-    _mainDeletionQueue.push_function([&]() {
+    _mainDeletionQueue.push_function([=, this]() {
         _device.destroyPipelineLayout(_gradientPipelineLayout);
         _device.destroyPipeline(sky.pipeline);
         _device.destroyPipeline(gradient.pipeline);
@@ -272,6 +287,7 @@ void AnitoWave::draw_main(vk::CommandBuffer cmd) {
     stats.mesh_draw_time = elapsed.count() / 1000.f;
 
     cmd.endRendering();
+    vkutil::transition_image(cmd, _drawImage.image, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eGeneral);
 }
 
 void AnitoWave::draw_imgui(vk::CommandBuffer cmd, vk::ImageView targetImageView) {
@@ -391,7 +407,7 @@ void AnitoWave::draw() {
 }
 
 bool is_visible(const RenderObject& obj, const glm::mat4& viewproj) {
-    std::array corners {
+    std::array<glm::vec3, 8> corners {
         glm::vec3 { 1, 1, 1 },
         glm::vec3 { 1, 1, -1 },
         glm::vec3 { 1, -1, 1 },
@@ -428,6 +444,7 @@ bool is_visible(const RenderObject& obj, const glm::mat4& viewproj) {
     }
 }
 
+
 void AnitoWave::draw_geometry(vk::CommandBuffer cmd) {
     std::vector<uint32_t> opaque_draws;
     opaque_draws.reserve(drawCommands.OpaqueSurfaces.size());
@@ -458,7 +475,7 @@ void AnitoWave::draw_geometry(vk::CommandBuffer cmd) {
     });
 
     // Write the buffer
-    GPUSceneData* sceneUniformData = static_cast<GPUSceneData *>(static_cast<VmaAllocation>(gpuSceneDataBuffer.allocation)->GetMappedData());
+    auto* sceneUniformData = static_cast<GPUSceneData *>(static_cast<VmaAllocation>(gpuSceneDataBuffer.allocation)->GetMappedData());
     *sceneUniformData = sceneData;
 
     // Create descriptor sest to bind and update buffer
@@ -508,7 +525,7 @@ void AnitoWave::draw_geometry(vk::CommandBuffer cmd) {
             cmd.bindIndexBuffer(r.indexBuffer, 0, vk::IndexType::eUint32);
         }
 
-        GPUDrawPushConstants push_constants;
+        GPUDrawPushConstants push_constants{};
         push_constants.worldMatrix = r.transform;
         push_constants.vertexBuffer = r.vertexBufferAddress;
 
@@ -614,6 +631,10 @@ void AnitoWave::update_scene() {
     mainCamera.update();
 
     glm::mat4 view = mainCamera.getViewMatrix();
+
+    if (_drawExtent.width == 0 || _drawExtent.height == 0) {
+        return; // Skip update if extent is invalid
+    }
 
     // Camera projection
     glm::mat4 projection = glm::perspective(glm::radians(70.f), (float)_drawExtent.width / (float)_drawExtent.height, 10000.f, 0.1f);
@@ -730,7 +751,7 @@ GPUMeshBuffers AnitoWave::uploadMesh(std::span<uint32_t> indices, std::span<Vert
 
     GPUMeshBuffers newSurface;
 
-    newSurface.vertexBuffer = create_buffer(vertexBufferSize, vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst, vma::MemoryUsage::eGpuOnly);
+    newSurface.vertexBuffer = create_buffer(vertexBufferSize, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eShaderDeviceAddress, vma::MemoryUsage::eGpuOnly);
 
     vk::BufferDeviceAddressInfo deviceAddressInfo = vk::BufferDeviceAddressInfo()
     .setBuffer(newSurface.vertexBuffer.buffer);
@@ -884,8 +905,6 @@ void AnitoWave::init_vulkan() {
     .setFlags(vma::AllocatorCreateFlagBits::eBufferDeviceAddress);
 
     _allocator = vma::createAllocator(allocatorInfo);
-
-    _mainDeletionQueue.push_function([&]() { _allocator.destroy(); });
 }
 
 void AnitoWave::init_swapchain() {
@@ -949,7 +968,7 @@ void AnitoWave::init_swapchain() {
         fmt::print("Failed to create depth image view!");
     }
 
-    _mainDeletionQueue.push_function([=]() {
+    _mainDeletionQueue.push_function([=, this]() {
         _device.destroyImageView(_drawImage.imageView);
         _allocator.destroyImage(_drawImage.image, _drawImage.allocation);
 
@@ -1025,7 +1044,7 @@ void AnitoWave::init_commands() {
             fmt::print("Failed to allocate command buffers!");
         }
 
-        _mainDeletionQueue.push_function([=]() { _device.destroyCommandPool(_frames[i]._commandPool); });
+        _mainDeletionQueue.push_function([=, this]() { _device.destroyCommandPool(_frames[i]._commandPool); });
     }
 
     vk::Result createRes = _device.createCommandPool(&commandPoolInfo, nullptr, &_immCommandPool);
@@ -1041,7 +1060,7 @@ void AnitoWave::init_commands() {
         fmt::print("Failed to allocate immediate command buffers!");
     }
 
-    _mainDeletionQueue.push_function([=]() { _device.destroyCommandPool(_immCommandPool); });
+    _mainDeletionQueue.push_function([=, this]() { _device.destroyCommandPool(_immCommandPool); });
 }
 
 void AnitoWave::init_sync_structures() {
@@ -1055,7 +1074,7 @@ void AnitoWave::init_sync_structures() {
         fmt::print("Failed to create immediate fence!");
     }
 
-    _mainDeletionQueue.push_function([=]() { _device.destroyFence(_immFence); });
+    _mainDeletionQueue.push_function([=, this]() { _device.destroyFence(_immFence); });
 
     for (int i = 0; i < FRAME_OVERLAP; i++) {
         createRes = _device.createFence(&fenceCreateInfo, nullptr, &_frames[i]._renderFence);
@@ -1075,7 +1094,7 @@ void AnitoWave::init_sync_structures() {
             fmt::print("Failed to create render semaphore!");
         }
 
-        _mainDeletionQueue.push_function([=]() {
+        _mainDeletionQueue.push_function([=, this]() {
             _device.destroyFence(_frames[i]._renderFence);
             _device.destroySemaphore(_frames[i]._swapchainSemaphore);
             _device.destroySemaphore(_frames[i]._renderSemaphore);
@@ -1154,6 +1173,13 @@ void AnitoWave::init_pipelines() {
     init_background_pipelines();
 
     metalRoughMaterial.build_pipelines(this);
+
+    _mainDeletionQueue.push_function([=, this]() {
+       _device.destroyPipeline(metalRoughMaterial.opaquePipeline.pipeline);
+       _device.destroyPipeline(metalRoughMaterial.transparentPipeline.pipeline);
+       _device.destroyPipelineLayout(metalRoughMaterial.opaquePipeline.layout);
+       _device.destroyDescriptorSetLayout(metalRoughMaterial.materialLayout);
+   });
 }
 
 void AnitoWave::init_descriptors() {
@@ -1169,7 +1195,7 @@ void AnitoWave::init_descriptors() {
 
     {
         DescriptorLayoutBuilder builder;
-        builder.add_binding(0, vk::DescriptorType::eSampledImage);
+        builder.add_binding(0, vk::DescriptorType::eStorageImage);
         _drawImageDescriptorLayout = builder.build(_device, vk::ShaderStageFlagBits::eCompute);
     }
 
@@ -1234,7 +1260,7 @@ void GLTFMetallic_Roughness::build_pipelines(AnitoWave *engine) {
     vk::DescriptorSetLayout layouts[] = { engine->_gpuSceneDataDescriptorLayout, materialLayout };
 
     vk::PipelineLayoutCreateInfo mesh_layout_info = vkinit::pipeline_layout_create_info();
-    mesh_layout_info.setLayoutCount(2);
+    mesh_layout_info.setSetLayoutCount(2);
     mesh_layout_info.setPSetLayouts(layouts);
     mesh_layout_info.setPPushConstantRanges(&matrixRange);
     mesh_layout_info.setPushConstantRangeCount(1);
@@ -1274,6 +1300,8 @@ void GLTFMetallic_Roughness::build_pipelines(AnitoWave *engine) {
 
     // Build the pipeline
     opaquePipeline.pipeline = pipelineBuilder.build_pipeline(engine->_device);
+
+    pipelineBuilder.enable_blending_additive();
 
     pipelineBuilder.enable_depthtest(false, vk::CompareOp::eGreaterOrEqual);
 

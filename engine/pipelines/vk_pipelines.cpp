@@ -108,7 +108,7 @@ void PipelineBuilder::disable_blending() {
 
 void PipelineBuilder::enable_blending_additive() {
     _colorBlendAttachment.setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
-    _colorBlendAttachment.setBlendEnable(vk::False);
+    _colorBlendAttachment.setBlendEnable(vk::True);
     _colorBlendAttachment.setSrcColorBlendFactor(vk::BlendFactor::eSrcAlpha);
     _colorBlendAttachment.setDstColorBlendFactor(vk::BlendFactor::eOne);
     _colorBlendAttachment.setColorBlendOp(vk::BlendOp::eAdd);
@@ -123,8 +123,8 @@ void PipelineBuilder::enable_blending_alphablend() {
     _colorBlendAttachment.setSrcColorBlendFactor(vk::BlendFactor::eSrcAlpha);
     _colorBlendAttachment.setDstColorBlendFactor(vk::BlendFactor::eOneMinusSrcAlpha);
     _colorBlendAttachment.setColorBlendOp(vk::BlendOp::eAdd);
-    _colorBlendAttachment.setSrcColorBlendFactor(vk::BlendFactor::eOne);
-    _colorBlendAttachment.setDstColorBlendFactor(vk::BlendFactor::eZero);
+    _colorBlendAttachment.setSrcAlphaBlendFactor(vk::BlendFactor::eOne);
+    _colorBlendAttachment.setDstAlphaBlendFactor(vk::BlendFactor::eZero);
     _colorBlendAttachment.setAlphaBlendOp(vk::BlendOp::eAdd);
 }
 

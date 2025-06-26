@@ -52,3 +52,8 @@ void Camera::processSDLEvent(SDL_Event &e) {
         pitch -= (float) e.motion.yrel / 200.f;
     }
 }
+
+void Camera::update() {
+    glm::mat4 cameraRotation = getRotationMatrix();
+    position += glm::vec3(cameraRotation * glm::vec4(velocity * 0.5f, 0.f));
+}
